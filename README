@@ -1,0 +1,2 @@
+http://localhost:8080/batch/score-job/run?fileInput=input.txt&fileOutput=file:input.txt.out
+http://localhost:8080/batch/hello-job/run

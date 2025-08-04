@@ -1,4 +1,4 @@
-package org.demo.batchdemo.scorejob;
+package org.demo.batchdemo.scorejob.steps;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

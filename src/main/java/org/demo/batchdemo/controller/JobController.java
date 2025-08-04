@@ -17,6 +17,7 @@ public class JobController {
     private final JobLauncher jobLauncher;
     private final Job scoreJob;
     private final Job helloJob;
+    private final Job parallelJob;
 
     @GetMapping("/hello-job/run")
     public String runHelloJob() throws Exception {
@@ -25,6 +26,15 @@ public class JobController {
 
         jobLauncher.run(helloJob, jobParameters);
         return "hello job triggered";
+    }
+
+    @GetMapping("/parallel-job/run")
+    public String runParallelJob() throws Exception {
+        JobParameters jobParameters = new JobParametersBuilder()
+                        .toJobParameters();
+
+        jobLauncher.run(parallelJob, jobParameters);
+        return "parallel job triggered";
     }
 
     @GetMapping("/score-job/run")

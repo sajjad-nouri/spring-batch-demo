@@ -14,48 +14,55 @@ import org.springframework.batch.item.ItemReader;
 import org.springframework.batch.item.ItemWriter;
 import org.springframework.batch.item.support.ListItemReader;
 import org.springframework.batch.repeat.RepeatStatus;
+import org.springframework.boot.task.ThreadPoolTaskExecutorBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.task.SimpleAsyncTaskExecutor;
+import org.springframework.core.task.TaskExecutor;
 import org.springframework.scheduling.concurrent.ConcurrentTaskExecutor;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.transaction.PlatformTransactionManager;
 
 import java.util.Arrays;
 
 @Configuration
 public class HelloJobConfiguration {
-    @Bean
-    public JobExecutionDecider decider() {
-        return (jobExecution, stepExecution) -> new FlowExecutionStatus("first");
+    private TaskExecutor createTaskExecutor() {
+        ThreadPoolTaskExecutor taskExecutor = new ThreadPoolTaskExecutorBuilder()
+                .corePoolSize(2)
+                .maxPoolSize(2)
+                .queueCapacity(100)
+                .threadNamePrefix("split-executor")
+                .build();
+        taskExecutor.initialize();
+        return taskExecutor;
     }
 
     @Bean
-    public Job helloJob(JobRepository jobRepository, Step step0, Step step1, Step step2, Step step3, Step step4) {
-//        Flow deciderFlow = new FlowBuilder<Flow>("firstFLow")
-//                .start(decider())
-//                .on("first").to(step1)
-//                .on("second").to(step2)
-//                .build();
+    public Job helloJob(JobRepository jobRepository, Step step0,Step step1, Step step2, Step step3, Step step4) {
+        Flow splitFlow = new FlowBuilder<Flow>("split-flow")
+                .split(createTaskExecutor())
+                .add(
+                        new FlowBuilder<Flow>("flow1").start(step1).build(),
+                        new FlowBuilder<Flow>("flow2").start(step2).build()
+                )
+                .build();
 
-        Flow flow1 = new FlowBuilder<Flow>("flow1")
-                .start(step1)
-                .build();
-        Flow flow2 = new FlowBuilder<Flow>("flow2")
-                .start(step2)
-                .build();
-        Flow splitFlow = new FlowBuilder<Flow>("splitFlow")
-                .split(new SimpleAsyncTaskExecutor())
-                .add(flow1, flow2)
-                .end();
-        Flow masterFlow = new FlowBuilder<Flow>("masterFlow")
+        Flow flow0 = new FlowBuilder<Flow>("split-0")
                 .start(step0)
-                .next(splitFlow)
+                .build();
+
+        Flow conditionalFlow = new FlowBuilder<Flow>("split-0")
+                .start(step0)
+                .on("YES").to(step1)
+                .from(step0).on("NO").to(step2)
                 .build();
 
         return new JobBuilder("helloJob", jobRepository)
                 .incrementer(new RunIdIncrementer())
-                .start(masterFlow)
-                .next(step3)
+                .start(flow0)
+                .next(splitFlow)
+                .next(step4)
                 .end()
                 .build();
     }
@@ -64,12 +71,12 @@ public class HelloJobConfiguration {
     public Step step0(JobRepository jobRepository, PlatformTransactionManager transactionManager) {
         return new StepBuilder("step0", jobRepository)
                 .tasklet((contribution, chunkContext) -> {
-                    JobExecution jobExecution = contribution.getStepExecution().getJobExecution();
-
                     Thread.sleep(3000);
                     System.out.println("Step 0 tasklet executed." );
+//                    contribution.setExitStatus(new ExitStatus("NO"));
                     return RepeatStatus.FINISHED;
                 }, transactionManager)
+                .allowStartIfComplete(true)
                 .build();
     }
 
@@ -77,20 +84,11 @@ public class HelloJobConfiguration {
     public Step step1(JobRepository jobRepository, PlatformTransactionManager transactionManager) {
         return new StepBuilder("step1", jobRepository)
                 .tasklet((contribution, chunkContext) -> {
-                    // Access JobExecutionContext
-                    JobExecution jobExecution = contribution.getStepExecution().getJobExecution();
-                    jobExecution.getExecutionContext().put("jobKey", "valueStoredInJobExecutionContext");
-
-                    // Access StepExecutionContext
-                    StepExecution stepExecution = contribution.getStepExecution();
-                    stepExecution.getExecutionContext().put("stepKey", "valueStoredInStepExecutionContext");
-
-                    contribution.setExitStatus(new ExitStatus("WAY2"));
-
                     Thread.sleep(3000);
                     System.out.println("Step 1 tasklet executed");
                     return RepeatStatus.FINISHED;
                 }, transactionManager)
+                .allowStartIfComplete(true)
                 .build();
     }
 
@@ -98,12 +96,11 @@ public class HelloJobConfiguration {
     public Step step2(JobRepository jobRepository, PlatformTransactionManager transactionManager) {
         return new StepBuilder("step2", jobRepository)
                 .tasklet((contribution, chunkContext) -> {
-                    JobExecution jobExecution = contribution.getStepExecution().getJobExecution();
-
                     Thread.sleep(3000);
-                    System.out.println("Step 2 tasklet executed." );
+                    System.out.println("Step 2 tasklet executed");
                     return RepeatStatus.FINISHED;
                 }, transactionManager)
+                .allowStartIfComplete(true)
                 .build();
     }
 
@@ -111,14 +108,11 @@ public class HelloJobConfiguration {
     public Step step3(JobRepository jobRepository, PlatformTransactionManager transactionManager) {
         return new StepBuilder("step3", jobRepository)
                 .tasklet((contribution, chunkContext) -> {
-                    JobExecution jobExecution = contribution.getStepExecution().getJobExecution();
-//                    contribution.setExitStatus(new ExitStatus("WAY2"));
-
-                    String jobKey = jobExecution.getExecutionContext().getString("jobKey");
                     Thread.sleep(3000);
-                    System.out.println("Step 3 tasklet executed. jobKey: " + jobKey);
+                    System.out.println("Step 3 tasklet executed");
                     return RepeatStatus.FINISHED;
                 }, transactionManager)
+                .allowStartIfComplete(true)
                 .build();
     }
 
@@ -126,15 +120,14 @@ public class HelloJobConfiguration {
     public Step step4(JobRepository jobRepository, PlatformTransactionManager transactionManager) {
         return new StepBuilder("step4", jobRepository)
                 .tasklet((contribution, chunkContext) -> {
-                    JobExecution jobExecution = contribution.getStepExecution().getJobExecution();
-
-                    String jobKey = jobExecution.getExecutionContext().getString("jobKey");
                     Thread.sleep(3000);
-                    System.out.println("Step 4 tasklet executed. jobKey: " + jobKey);
+                    System.out.println("Step 4 tasklet executed");
                     return RepeatStatus.FINISHED;
                 }, transactionManager)
+                .allowStartIfComplete(true)
                 .build();
     }
+
 
 //    @Bean
 //    public Step step2(JobRepository jobRepository, PlatformTransactionManager transactionManager) throws InterruptedException {
